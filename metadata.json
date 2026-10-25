@@ -1,0 +1,6 @@
+{
+  "name": "ChatMate Telegram Bot Studio",
+  "description": "Production Python Telegram Bot for ChatMate with live interactive simulator, source code exporter, Android Termux setup, and free cloud deployment guide.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
