@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
 """
-ChatMate Telegram Bot
-=====================
-A feature-packed, beginner-friendly Telegram Bot for the ChatMate application.
-Built using python-telegram-bot (v20+) with async/await architecture.
+ChatMate Telegram Bot (Render 24/7 Ready)
+========================================
+A feature-packed, beginner-friendly Telegram Bot for ChatMate.
+Includes an embedded lightweight HTTP health-check server to satisfy
+Render's Web Service port scanner, ensuring 100% free 24/7 uptime without timeouts.
 
 Requirements:
     pip install python-telegram-bot python-dotenv
-
-Configuration:
-    Only ONE environment variable is required:
-    - TELEGRAM_BOT_TOKEN (obtained from @BotFather)
-
-No ADMIN_TELEGRAM_ID or admin setup required.
 """
 
 import os
 import sys
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -30,7 +27,7 @@ from telegram.ext import (
     filters,
 )
 
-# Load environment variables from .env file if present
+# Load environment variables
 load_dotenv()
 
 # Configure logging
@@ -43,10 +40,40 @@ logger = logging.getLogger("ChatMateBot")
 # Constants
 APP_DOWNLOAD_URL = "https://tinyurl.com/Chat-mate-app"
 
-# Helper function to generate main inline keyboard
+
+# ---------------------------------------------------------------------------
+# Lightweight HTTP Health Server (Satisfies Render Web Service Port Scan)
+# ---------------------------------------------------------------------------
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    """Answers Render's port probe so it declares the service 'Live'."""
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"ChatMate Bot is active and running 24/7 on Telegram!")
+
+    def log_message(self, format, *args):
+        # Keep logs clean by ignoring routine health checks
+        return
+
+
+def start_health_server() -> None:
+    """Runs dummy web server in a daemon background thread."""
+    try:
+        port = int(os.getenv("PORT", 10000))
+        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        logger.info(f"Render health check port server started on 0.0.0.0:{port}")
+        server.serve_forever()
+    except Exception as e:
+        logger.warning(f"Health server failed to bind port: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Telegram Inline Keyboard & Handlers
+# ---------------------------------------------------------------------------
 def get_main_keyboard() -> InlineKeyboardMarkup:
     """
-    Creates the main inline keyboard with:
+    Main inline keyboard:
     - 💖 About ChatMate
     - 📲 Download App (direct link to https://tinyurl.com/Chat-mate-app)
     - ℹ️ Help
@@ -63,12 +90,8 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
-# Command Handlers
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Handles /start command.
-    Sends a warm welcome message with functional inline action buttons.
-    """
+    """Handles /start: Welcomes user with functional action buttons."""
     user = update.effective_user
     user_name = user.first_name if user else "Friend"
 
@@ -94,10 +117,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Handles /about command.
-    Shares background, key features, and highlights of ChatMate.
-    """
+    """Handles /about command."""
     about_text = (
         "💖 <b>About ChatMate</b>\n\n"
         "ChatMate is a next-generation social communication app engineered for speed, "
@@ -128,10 +148,7 @@ async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Handles /app command.
-    Provides the official application download link.
-    """
+    """Handles /app command."""
     app_text = (
         "📲 <b>Download ChatMate App</b>\n\n"
         "Get the latest version of ChatMate for Android with new updates and security features!\n\n"
@@ -159,10 +176,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Handles /help command.
-    Lists all available commands and troubleshooting tips.
-    """
+    """Handles /help command."""
     help_text = (
         "ℹ️ <b>ChatMate Help Center</b>\n\n"
         "Here are all the ways you can use this bot:\n\n"
@@ -181,18 +195,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
 
-# Callback Query Handler for Inline Buttons
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Handles inline button clicks for About, Help, and Navigation.
-    """
+    """Handles inline button clicks for About, Help, and Navigation."""
     query = update.callback_query
     if not query:
         return
 
-    # Always answer callback query to clear button loading state
     await query.answer()
-
     data = query.data
 
     if data == "about_chatmate":
@@ -261,9 +270,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def unknown_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Polite fallback when the user sends text that isn't a recognized command.
-    """
+    """Polite fallback for unhandled text."""
     if update.message:
         await update.message.reply_text(
             "🤖 I'm here to help you with ChatMate!\n"
@@ -273,49 +280,34 @@ async def unknown_message_handler(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Logs errors caused by updates."""
-    logger.error("Exception while handling an update:", exc_info=context.error)
+    """Logs unexpected exceptions."""
+    logger.error("Exception while handling update:", exc_info=context.error)
 
 
 def main() -> None:
-    """
-    Initializes and starts the Telegram bot.
-    Only TELEGRAM_BOT_TOKEN is required.
-    """
+    """Starts the HTTP health check server and Telegram Bot polling."""
     token = os.getenv("TELEGRAM_BOT_TOKEN")
 
-    if not token or token.strip() == "" or token == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
-        logger.critical(
-            "\n" + "=" * 60 + "\n"
-            "❌ ERROR: TELEGRAM_BOT_TOKEN environment variable is not set!\n\n"
-            "How to fix:\n"
-            "1. On Linux/macOS/Termux:\n"
-            "   export TELEGRAM_BOT_TOKEN=\"your_bot_token_from_botfather\"\n"
-            "   python bot.py\n\n"
-            "2. Or create a .env file with:\n"
-            "   TELEGRAM_BOT_TOKEN=your_bot_token_from_botfather\n"
-            "=" * 60 + "\n"
-        )
+    if not token or token.strip() == "":
+        logger.critical("❌ ERROR: TELEGRAM_BOT_TOKEN is not set in environment!")
         sys.exit(1)
 
-    logger.info("Initializing ChatMate Telegram Bot (No Admin ID required)...")
+    # 1. Start embedded health-check server to satisfy Render's port scanner
+    port_thread = threading.Thread(target=start_health_server, daemon=True)
+    port_thread.start()
 
-    # Build application with token
+    logger.info("Initializing ChatMate Telegram Bot...")
+
+    # 2. Build and run Telegram application
     application = ApplicationBuilder().token(token).build()
 
-    # Register command handlers (public, no admin restrictions)
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("about", about_command))
     application.add_handler(CommandHandler("app", app_command))
     application.add_handler(CommandHandler("help", help_command))
 
-    # Register callback query handler for inline button clicks
     application.add_handler(CallbackQueryHandler(button_callback_handler))
-
-    # Register fallback handler for general text
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_message_handler))
-
-    # Register global error handler
     application.add_error_handler(error_handler)
 
     logger.info("ChatMate Bot is starting polling... Press Ctrl+C to stop.")
