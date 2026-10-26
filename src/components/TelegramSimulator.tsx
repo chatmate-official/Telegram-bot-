@@ -9,10 +9,7 @@ import {
   User,
   CheckCheck,
   Terminal,
-  Info,
-  Heart,
-  Download,
-  HelpCircle,
+  CreditCard,
   ShieldCheck,
 } from 'lucide-react';
 
@@ -26,12 +23,15 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
     {
       id: 'm1',
       sender: 'bot',
-      text: `👋 <b>Welcome to ${config.appName}, Alex!</b>\n\n✨ <b>${config.appName}</b> is your smart messaging app built for speed, privacy, and connecting you effortlessly with friends and communities.\n\n📌 <b>Available Commands:</b>\n• /start - Restart bot and show this welcome menu\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help center\n\n👇 <i>Tap an option below to get started:</i>`,
+      text: `👋 <b>Welcome to ${config.appName}, Alex!</b>\n\n✨ <b>${config.appName}</b> is your ultimate smart messaging app built for speed, privacy, and rich community conversations.\n\n💳 <b>Razorpay Payment Enabled:</b> You can now upgrade your account or make payments directly through official Razorpay (UPI, GPay, PhonePe, Paytm, Cards).\n\n📌 <b>Available Commands:</b>\n• /start - Restart bot and show this welcome menu\n• /pay - Open Razorpay payment portal\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help center\n\n👇 <i>Tap an option below to get started:</i>`,
       timestamp: '12:00 PM',
       keyboard: [
         [
           { text: '💖 About ChatMate', callbackData: 'about_chatmate' },
           { text: '📲 Download App', url: config.appDownloadUrl },
+        ],
+        [
+          { text: '💳 Pay with Razorpay', callbackData: 'pay_menu' },
         ],
         [
           { text: 'ℹ️ Help', callbackData: 'help_menu' },
@@ -54,8 +54,8 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
     codeSnippet: string;
   }>({
     type: 'CommandHandler("start")',
-    detail: 'Executed /start for user. Sent welcome message with 3 functional inline buttons.',
-    codeSnippet: 'application.add_handler(CommandHandler("start", start_command))',
+    detail: 'Executed /start. Sent welcome menu with Razorpay payment button.',
+    codeSnippet: 'InlineKeyboardButton("💳 Pay with Razorpay", callback_data="pay_menu")',
   });
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -79,8 +79,23 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
       { text: '📲 Download App', url: config.appDownloadUrl },
     ],
     [
+      { text: '💳 Pay with Razorpay', callbackData: 'pay_menu' },
+    ],
+    [
       { text: 'ℹ️ Help', callbackData: 'help_menu' },
     ],
+  ];
+
+  const getPaymentPlansKeyboard = (): InlineButton[][] => [
+    [
+      { text: '🌟 1 Month VIP - ₹99', callbackData: 'buy_plan_99' },
+    ],
+    [
+      { text: '💎 1 Year VIP - ₹499', callbackData: 'buy_plan_499' },
+    ],
+    [
+      { text: '🔙 Back to Main Menu', callbackData: 'main_menu' },
+    ]
   ];
 
   const handleCommandOrText = (rawText: string) => {
@@ -110,7 +125,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
       if (lower === '/start') {
         setLastEvent({
           type: 'CommandHandler("start")',
-          detail: 'Sent welcome card with 3 functional inline buttons (About, Download App, Help).',
+          detail: 'Sent welcome card with Razorpay Payment, Download App, and About buttons.',
           codeSnippet: `async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):\n    await update.message.reply_text(welcome_text, reply_markup=get_main_keyboard(), parse_mode=ParseMode.HTML)`,
         });
         setMessages((prev) => [
@@ -118,13 +133,34 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
           {
             id: `b-${Date.now()}`,
             sender: 'bot',
-            text: `👋 <b>Welcome to ${config.appName}!</b>\n\n✨ <b>${config.appName}</b> is your smart messaging app built for speed, privacy, and connecting you effortlessly with friends and communities.\n\n📌 <b>Available Commands:</b>\n• /start - Restart bot and show this welcome menu\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help center\n\n👇 <i>Tap an option below to get started:</i>`,
+            text: `👋 <b>Welcome to ${config.appName}!</b>\n\n✨ <b>${config.appName}</b> is your ultimate smart messaging app built for speed, privacy, and rich community conversations.\n\n💳 <b>Razorpay Payment Enabled:</b> You can now upgrade your account or make payments directly through official Razorpay (UPI, GPay, PhonePe, Paytm, Cards).\n\n📌 <b>Available Commands:</b>\n• /start - Restart bot and show this welcome menu\n• /pay - Open Razorpay payment portal\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help center\n\n👇 <i>Tap an option below to get started:</i>`,
             timestamp: replyTime,
             keyboard: getMainKeyboard(),
             meta: {
               handlerType: 'CommandHandler',
               commandOrQuery: '/start',
               processingTimeMs: 32,
+            },
+          },
+        ]);
+      } else if (lower === '/pay') {
+        setLastEvent({
+          type: 'CommandHandler("pay")',
+          detail: 'Matched pay_command. Opened Razorpay VIP subscription portal.',
+          codeSnippet: `async def pay_command(update: Update, context: ContextTypes.DEFAULT_TYPE):\n    await update.message.reply_text(pay_intro, reply_markup=get_payment_plans_keyboard(), parse_mode=ParseMode.HTML)`,
+        });
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `b-${Date.now()}`,
+            sender: 'bot',
+            text: `💳 <b>${config.appName} Razorpay Payment Portal</b>\n\nUpgrade to <b>${config.appName} VIP</b> to unlock exclusive benefits:\n• ⚡ Unlimited High-Speed Messaging\n• 🤖 Priority AI Companion Access\n• 🚫 100% Ad-Free Experience\n• 💎 Exclusive VIP Profile Badge\n\n🔒 <i>Payments are secured 100% by Razorpay (UPI, GPay, PhonePe, Cards, NetBanking).</i>\n\nSelect your preferred plan below:`,
+            timestamp: replyTime,
+            keyboard: getPaymentPlansKeyboard(),
+            meta: {
+              handlerType: 'CommandHandler',
+              commandOrQuery: '/pay',
+              processingTimeMs: 28,
             },
           },
         ]);
@@ -144,8 +180,11 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
             keyboard: [
               [
                 { text: '📲 Download App', url: config.appDownloadUrl },
-                { text: 'ℹ️ Help', callbackData: 'help_menu' },
+                { text: '💳 Pay with Razorpay', callbackData: 'pay_menu' },
               ],
+              [
+                { text: 'ℹ️ Help', callbackData: 'help_menu' },
+              ]
             ],
             meta: {
               handlerType: 'CommandHandler',
@@ -173,7 +212,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
               ],
               [
                 { text: '💖 About ChatMate', callbackData: 'about_chatmate' },
-                { text: 'ℹ️ Help', callbackData: 'help_menu' },
+                { text: '💳 Razorpay Payment', callbackData: 'pay_menu' },
               ],
             ],
             meta: {
@@ -194,7 +233,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
           {
             id: `b-${Date.now()}`,
             sender: 'bot',
-            text: `ℹ️ <b>${config.appName} Help Center</b>\n\nHere are all the ways you can use this bot:\n\n• /start - Launch the bot and view the welcome menu\n• /about - Read about ${config.appName} features and capabilities\n• /app - Receive the official application download link\n• /help - View this help center\n\n💡 <i>Tip: You can also tap the interactive buttons on any message below!</i>`,
+            text: `ℹ️ <b>${config.appName} Help Center</b>\n\nHere are all the ways you can use this bot:\n\n• /start - Launch the bot and view the welcome menu\n• /pay - Open Razorpay payment portal\n• /about - Read about ${config.appName} features and capabilities\n• /app - Receive the official application download link\n• /help - View this help center\n\n💡 <i>Tip: You can also tap the interactive buttons on any message below!</i>`,
             timestamp: replyTime,
             keyboard: getMainKeyboard(),
             meta: {
@@ -205,7 +244,6 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
           },
         ]);
       } else {
-        // Fallback message
         setLastEvent({
           type: 'MessageHandler(filters.TEXT & ~filters.COMMAND)',
           detail: `User sent unhandled text "${text}". Friendly fallback prompt triggered.`,
@@ -216,7 +254,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
           {
             id: `b-${Date.now()}`,
             sender: 'bot',
-            text: `🤖 I'm here to help you with <b>${config.appName}</b>!\n\nPlease use the buttons below or type /help to see all available commands.`,
+            text: `🤖 I'm here to help you with <b>${config.appName}</b>!\n\nPlease use the buttons below or type /help or /pay to see all available options.`,
             timestamp: replyTime,
             keyboard: getMainKeyboard(),
             meta: {
@@ -231,12 +269,12 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
 
   const handleButtonClick = (button: InlineButton, messageId: string) => {
     if (button.url) {
-      showToast(`🌐 Opening Download Link: ${button.url}`);
+      showToast(`🌐 Opening link: ${button.url}`);
       window.open(button.url, '_blank', 'noopener,noreferrer');
       setLastEvent({
         type: 'InlineKeyboardButton(url=...)',
-        detail: `Client-side URL redirect opened: ${button.url}`,
-        codeSnippet: `InlineKeyboardButton("📲 Download App", url="${button.url}")`,
+        detail: `Opened external checkout/download link: ${button.url}`,
+        codeSnippet: `InlineKeyboardButton("${button.text}", url="${button.url}")`,
       });
       return;
     }
@@ -244,7 +282,59 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
     if (button.callbackData) {
       const data = button.callbackData;
 
-      if (data === 'about_chatmate') {
+      if (data === 'pay_menu') {
+        setLastEvent({
+          type: 'CallbackQueryHandler(data="pay_menu")',
+          detail: 'User tapped "💳 Pay with Razorpay". Displaying VIP subscription tiers.',
+          codeSnippet: `if query.data == "pay_menu":\n    await query.edit_message_text(pay_intro, reply_markup=get_payment_plans_keyboard(), parse_mode=ParseMode.HTML)`,
+        });
+        showToast('💳 Opened Razorpay plans portal');
+
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === messageId) {
+              return {
+                ...msg,
+                text: `💳 <b>${config.appName} Razorpay Payment Portal</b>\n\nChoose a VIP Subscription plan below to upgrade your ${config.appName} experience:\n\n🌟 <b>1 Month VIP:</b> ₹99 (Ad-free, High-speed AI)\n💎 <b>1 Year VIP:</b> ₹499 (Best Value! Save 58%)\n\n🔒 <i>100% Secure Checkout via Razorpay (UPI / GPay / PhonePe / Paytm / Cards / NetBanking).</i>`,
+                keyboard: getPaymentPlansKeyboard(),
+              };
+            }
+            return msg;
+          })
+        );
+      } else if (data === 'buy_plan_99' || data === 'buy_plan_499') {
+        const amount = data === 'buy_plan_99' ? 99 : 499;
+        const planName = amount === 99 ? '1-Month VIP' : '1-Year VIP';
+        const simulatedRzpUrl = `https://rzp.io/l/chatmate-vip-${amount}`;
+
+        setLastEvent({
+          type: 'create_razorpay_payment_link()',
+          detail: `Generated live Razorpay Payment Link for ${planName} (₹${amount}) with Key ID rzp_live_TlLpKTsB7MoXPp`,
+          codeSnippet: `link = razorpay_client.payment_link.create({\n    "amount": ${amount * 100},\n    "currency": "INR",\n    "description": "${config.appName} ${planName}"\n})`,
+        });
+        showToast(`⚡ Razorpay Link Generated: ₹${amount}`);
+
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.id === messageId) {
+              return {
+                ...msg,
+                text: `🎉 <b>Ready to complete your payment!</b>\n\n📦 <b>Plan:</b> ${planName}\n💰 <b>Amount:</b> ₹${amount}\n🔒 <b>Gateway:</b> Razorpay Live API\n\nTap the button below to pay securely via <b>Razorpay</b> (UPI, GPay, PhonePe, Cards, NetBanking):`,
+                keyboard: [
+                  [
+                    { text: `🚀 Pay ₹${amount} via Razorpay (UPI / Cards)`, url: simulatedRzpUrl },
+                  ],
+                  [
+                    { text: '🔙 Back to Plans', callbackData: 'pay_menu' },
+                    { text: '🏠 Main Menu', callbackData: 'main_menu' },
+                  ]
+                ],
+              };
+            }
+            return msg;
+          })
+        );
+      } else if (data === 'about_chatmate') {
         setLastEvent({
           type: 'CallbackQueryHandler(data="about_chatmate")',
           detail: 'User tapped "💖 About ChatMate". Message in-place edited via query.edit_message_text().',
@@ -257,11 +347,11 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
             if (msg.id === messageId) {
               return {
                 ...msg,
-                text: `💖 <b>About ${config.appName}</b>\n\n${config.appName} is designed to make your daily conversations smoother, faster, and smarter!\n\n✨ <b>Highlights:</b>\n• End-to-end security & user privacy\n• Smart message translation & AI companion\n• High-definition voice & video quality\n• Low battery & lightweight data consumption\n\n👇 <i>Ready to join? Download now:</i>`,
+                text: `💖 <b>About ${config.appName}</b>\n\n${config.appName} is designed to make your daily conversations smoother, faster, and smarter!\n\n✨ <b>Highlights:</b>\n• End-to-end security & user privacy\n• Smart message translation & AI companion\n• High-definition voice & video quality\n• Low battery & lightweight data consumption\n\n👇 <i>Ready to join? Download or upgrade below:</i>`,
                 keyboard: [
                   [
                     { text: '📲 Download App', url: config.appDownloadUrl },
-                    { text: 'ℹ️ Help', callbackData: 'help_menu' },
+                    { text: '💳 Pay with Razorpay', callbackData: 'pay_menu' },
                   ],
                   [
                     { text: '🔙 Back to Main Menu', callbackData: 'main_menu' },
@@ -285,11 +375,11 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
             if (msg.id === messageId) {
               return {
                 ...msg,
-                text: `ℹ️ <b>${config.appName} Help Center</b>\n\nWelcome to the help section! Need guidance on how to use ${config.appName}?\n\n• <b>Download App:</b> Tap '📲 Download App' or use /app to download the APK.\n• <b>Features:</b> Tap '💖 About ChatMate' or use /about to see feature details.\n• <b>Commands:</b> Use /start to refresh the menu anytime.\n\nTap below to download or return to the main menu:`,
+                text: `ℹ️ <b>${config.appName} Help Center</b>\n\nWelcome to the help section! Need guidance on how to use ${config.appName}?\n\n• <b>Download App:</b> Tap '📲 Download App' or use /app to download the APK.\n• <b>Razorpay Payment:</b> Tap '💳 Pay with Razorpay' or use /pay to upgrade.\n• <b>Features:</b> Tap '💖 About ChatMate' or use /about to see feature details.\n• <b>Commands:</b> Use /start to refresh the menu anytime.\n\nTap below to choose an action:`,
                 keyboard: [
                   [
                     { text: '📲 Download App', url: config.appDownloadUrl },
-                    { text: '💖 About ChatMate', callbackData: 'about_chatmate' },
+                    { text: '💳 Pay with Razorpay', callbackData: 'pay_menu' },
                   ],
                   [
                     { text: '🔙 Back to Main Menu', callbackData: 'main_menu' },
@@ -313,7 +403,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
             if (msg.id === messageId) {
               return {
                 ...msg,
-                text: `👋 <b>${config.appName} Main Menu</b>\n\nWelcome back! What would you like to explore today?\n\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help guide`,
+                text: `👋 <b>${config.appName} Main Menu</b>\n\nWelcome back! What would you like to explore today?\n\n• /pay - Razorpay payment portal\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help guide`,
                 keyboard: getMainKeyboard(),
               };
             }
@@ -329,7 +419,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
       {
         id: `init-${Date.now()}`,
         sender: 'bot',
-        text: `👋 <b>Welcome to ${config.appName}, Alex!</b>\n\n✨ <b>${config.appName}</b> is your smart messaging app built for speed, privacy, and connecting you effortlessly with friends and communities.\n\n📌 <b>Available Commands:</b>\n• /start - Restart bot and show this welcome menu\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help center\n\n👇 <i>Tap an option below to get started:</i>`,
+        text: `👋 <b>Welcome to ${config.appName}, Alex!</b>\n\n✨ <b>${config.appName}</b> is your ultimate smart messaging app built for speed, privacy, and rich community conversations.\n\n💳 <b>Razorpay Payment Enabled:</b> You can now upgrade your account or make payments directly through official Razorpay (UPI, GPay, PhonePe, Paytm, Cards).\n\n📌 <b>Available Commands:</b>\n• /start - Restart bot and show this welcome menu\n• /pay - Open Razorpay payment portal\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help center\n\n👇 <i>Tap an option below to get started:</i>`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         keyboard: getMainKeyboard(),
         meta: {
@@ -367,11 +457,11 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-slate-100 text-sm tracking-tight">{config.appName} Bot</span>
                 <span className="text-[10px] font-mono uppercase bg-emerald-950 text-emerald-400 border border-emerald-800/60 px-1.5 py-0.2 rounded">
-                  No Admin Required
+                  Razorpay Live
                 </span>
               </div>
               <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                <span>Public Bot Service</span>
+                <span>VIP & Payments Enabled</span>
                 <span>·</span>
                 <span className="text-sky-400 font-mono text-[11px]">@ChatMateAppBot</span>
               </div>
@@ -433,7 +523,11 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
                         <button
                           key={bIdx}
                           onClick={() => handleButtonClick(btn, msg.id)}
-                          className="bg-slate-800/90 hover:bg-sky-900/40 text-slate-200 hover:text-sky-200 border border-slate-700/80 hover:border-sky-500/50 text-xs font-medium py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm whitespace-nowrap cursor-pointer"
+                          className={`border text-xs font-medium py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm whitespace-nowrap cursor-pointer ${
+                            btn.text.includes('Pay') || btn.text.includes('₹')
+                              ? 'bg-emerald-950/80 hover:bg-emerald-900/60 text-emerald-200 border-emerald-700/70'
+                              : 'bg-slate-800/90 hover:bg-sky-900/40 text-slate-200 hover:text-sky-200 border-slate-700/80 hover:border-sky-500/50'
+                          }`}
                         >
                           <span>{btn.text}</span>
                           {btn.url && <ExternalLink className="w-3 h-3 opacity-70 shrink-0" />}
@@ -459,7 +553,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
         {/* Quick Command Pills */}
         <div className="px-4 py-2 bg-slate-900/90 border-t border-slate-800 flex items-center gap-2 overflow-x-auto text-xs text-slate-400 scrollbar-none">
           <span className="text-[11px] uppercase tracking-wider text-slate-400 shrink-0">Commands:</span>
-          {['/start', '/about', '/app', '/help'].map((cmd) => (
+          {['/start', '/pay', '/about', '/app', '/help'].map((cmd) => (
             <button
               key={cmd}
               onClick={() => handleCommandOrText(cmd)}
@@ -482,7 +576,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type /start, /about, /app, /help or a message..."
+            placeholder="Type /start, /pay, /about, /app, /help..."
             className="flex-1 bg-slate-950/80 border border-slate-800 focus:border-sky-500 rounded-lg px-4 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
           />
           <button
@@ -505,7 +599,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
               <h3 className="font-semibold text-slate-100 text-sm">Bot Engine Event Inspector</h3>
             </div>
             <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded">
-              Active Polling
+              Razorpay API Active
             </span>
           </div>
 
@@ -533,53 +627,50 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
           </div>
         </div>
 
-        {/* Feature Highlights & Configuration State */}
+        {/* Razorpay Gateway Status Card */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4">
           <div className="flex items-center gap-2 text-slate-100 font-semibold text-sm">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Zero Admin ID Dependency Verified</span>
+            <CreditCard className="w-4 h-4 text-emerald-400" />
+            <span>Razorpay Payment Gateway Config</span>
           </div>
 
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-              <span className="text-slate-400 block text-[11px]">Required Env Vars</span>
-              <span className="font-mono text-emerald-400 font-medium">{config.envVarName} only</span>
+              <span className="text-slate-400 block text-[11px]">Razorpay Key ID</span>
+              <span className="font-mono text-sky-300 font-medium">rzp_live_TlLpKTsB7...</span>
             </div>
             <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-              <span className="text-slate-400 block text-[11px]">ADMIN_TELEGRAM_ID</span>
-              <span className="font-medium text-slate-400">None (Removed)</span>
+              <span className="text-slate-400 block text-[11px]">Payment Modes</span>
+              <span className="font-medium text-emerald-300">UPI, Cards, NetBanking</span>
             </div>
             <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-              <span className="text-slate-400 block text-[11px]">App Link</span>
-              <a
-                href={config.appDownloadUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium text-sky-400 hover:underline truncate block"
-              >
-                {config.appDownloadUrl}
-              </a>
+              <span className="text-slate-400 block text-[11px]">1 Month VIP</span>
+              <span className="font-semibold text-slate-200">₹99</span>
             </div>
             <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-              <span className="text-slate-400 block text-[11px]">Framework</span>
-              <span className="font-medium text-slate-200">python-telegram-bot v20+</span>
+              <span className="text-slate-400 block text-[11px]">1 Year VIP</span>
+              <span className="font-semibold text-slate-200">₹499 (Save 58%)</span>
             </div>
           </div>
 
           <div className="border-t border-slate-800 pt-3">
-            <span className="text-xs font-semibold text-slate-300 block mb-2">Required Inline Buttons Checklist:</span>
+            <span className="text-xs font-semibold text-slate-300 block mb-2">Active Buttons on /start:</span>
             <ul className="space-y-1.5 text-xs text-slate-300">
               <li className="flex items-center gap-2">
                 <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span><b>💖 About ChatMate</b> - In-place callback query response</span>
+                <span><b>💖 About ChatMate</b> - Features & specs</span>
               </li>
               <li className="flex items-center gap-2">
                 <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span><b>📲 Download App</b> - Direct URL (<code className="text-sky-300">{config.appDownloadUrl}</code>)</span>
+                <span><b>📲 Download App</b> - Official link (<code className="text-sky-300">{config.appDownloadUrl}</code>)</span>
               </li>
               <li className="flex items-center gap-2">
                 <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span><b>ℹ️ Help</b> - Interactive help manual with guidance & command list</span>
+                <span><b>💳 Pay with Razorpay</b> - Instant UPI & Card checkout links</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span><b>ℹ️ Help</b> - Help & commands center</span>
               </li>
             </ul>
           </div>

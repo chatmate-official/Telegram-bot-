@@ -25,6 +25,7 @@ export default function App() {
   const [botConfig, setBotConfig] = useState<BotConfig>({
     appName: 'ChatMate',
     appDownloadUrl: 'https://tinyurl.com/Chat-mate-app',
+    razorpayPaymentUrl: 'https://rzp.io/l/chatmate-vip-99',
     envVarName: 'TELEGRAM_BOT_TOKEN',
   });
 

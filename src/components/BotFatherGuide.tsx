@@ -26,6 +26,7 @@ export const BotFatherGuide: React.FC<Props> = ({ config }) => {
   };
 
   const telegramCommandsList = `start - Launch ChatMate bot & view welcome menu
+pay - Open Razorpay VIP payment portal
 about - Learn about ChatMate features & privacy
 app - Get direct app download link
 help - Show all commands & assistance`;

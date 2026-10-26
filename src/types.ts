@@ -20,5 +20,6 @@ export interface InlineButton {
 export interface BotConfig {
   appName: string;
   appDownloadUrl: string;
+  razorpayPaymentUrl: string;
   envVarName: string;
 }
