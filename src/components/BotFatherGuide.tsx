@@ -25,11 +25,8 @@ export const BotFatherGuide: React.FC<Props> = ({ config }) => {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const telegramCommandsList = `start - Launch ChatMate bot & view welcome menu
-pay - Open Razorpay VIP payment portal
-about - Learn about ChatMate features & privacy
-app - Get direct app download link
-help - Show all commands & assistance`;
+  const telegramCommandsList = `start - Start bot and activate ChatMate
+app - Get ChatMate app download link`;
 
   return (
     <div className="space-y-8">

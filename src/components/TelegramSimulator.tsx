@@ -10,6 +10,8 @@ import {
   CheckCheck,
   Terminal,
   CreditCard,
+  Lock,
+  Unlock,
   ShieldCheck,
 } from 'lucide-react';
 
@@ -19,22 +21,23 @@ interface Props {
 }
 
 export const TelegramSimulator: React.FC<Props> = ({ config }) => {
+  const [hasPaid, setHasPaid] = useState(false);
   const [messages, setMessages] = useState<TelegramMessage[]>([
     {
       id: 'm1',
       sender: 'bot',
-      text: `👋 <b>Welcome to ${config.appName}, Alex!</b>\n\n✨ <b>${config.appName}</b> is your ultimate smart messaging app built for speed, privacy, and rich community conversations.\n\n💳 <b>Razorpay Payment Enabled:</b> You can now upgrade your account or make payments directly through official Razorpay (UPI, GPay, PhonePe, Paytm, Cards).\n\n📌 <b>Available Commands:</b>\n• /start - Restart bot and show this welcome menu\n• /pay - Open Razorpay payment portal\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help center\n\n👇 <i>Tap an option below to get started:</i>`,
+      text: `👋 <b>Welcome to ${config.appName}, Alex!</b>\n\n🔒 <b>ChatMate Private VIP Access Pass</b>\nTo download the official <b>${config.appName} Application</b>, a one-time activation fee of <b>₹300</b> is required.\n\n✨ <b>What you unlock after ₹300 payment:</b>\n• 📲 <b>Direct APK Download Link</b> (Full Unrestricted Access)\n• ⚡ High-speed lag-free private messaging\n• 🤖 Smart AI Companion & voice filters\n• 💎 Lifetime VIP Membership & zero advertisements\n\n💳 <i>Secure payment handled 100% by Razorpay (Google Pay, PhonePe, Paytm, UPI, Cards, NetBanking).</i>\n\n👇 <b>Step 1:</b> Tap the button below to Pay ₹300\n👇 <b>Step 2:</b> After paying, tap <b>'I Have Paid — Unlock App Link'</b>:`,
       timestamp: '12:00 PM',
       keyboard: [
         [
+          { text: '💳 Pay ₹300 via Razorpay (UPI / GPay / Cards)', url: 'https://rzp.io/l/chatmate-300-access' },
+        ],
+        [
+          { text: '✅ I Have Paid — Unlock App Link', callbackData: 'verify_payment' },
+        ],
+        [
           { text: '💖 About ChatMate', callbackData: 'about_chatmate' },
-          { text: '📲 Download App', url: config.appDownloadUrl },
-        ],
-        [
-          { text: '💳 Pay with Razorpay', callbackData: 'pay_menu' },
-        ],
-        [
-          { text: 'ℹ️ Help', callbackData: 'help_menu' },
+          { text: 'ℹ️ Help / Support', callbackData: 'help_menu' },
         ],
       ],
       meta: {
@@ -53,9 +56,9 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
     detail: string;
     codeSnippet: string;
   }>({
-    type: 'CommandHandler("start")',
-    detail: 'Executed /start. Sent welcome menu with Razorpay payment button.',
-    codeSnippet: 'InlineKeyboardButton("💳 Pay with Razorpay", callback_data="pay_menu")',
+    type: 'CommandHandler("/start")',
+    detail: 'Presented mandatory ₹300 Razorpay paywall. App download link remains locked until payment is verified.',
+    codeSnippet: 'InlineKeyboardButton("💳 Pay ₹300 via Razorpay", url=payment_url)',
   });
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -73,29 +76,27 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const getMainKeyboard = (): InlineButton[][] => [
+  const getLockedKeyboard = (): InlineButton[][] => [
+    [
+      { text: '💳 Pay ₹300 via Razorpay (UPI / GPay / Cards)', url: 'https://rzp.io/l/chatmate-300-access' },
+    ],
+    [
+      { text: '✅ I Have Paid — Unlock App Link', callbackData: 'verify_payment' },
+    ],
     [
       { text: '💖 About ChatMate', callbackData: 'about_chatmate' },
-      { text: '📲 Download App', url: config.appDownloadUrl },
-    ],
-    [
-      { text: '💳 Pay with Razorpay', callbackData: 'pay_menu' },
-    ],
-    [
-      { text: 'ℹ️ Help', callbackData: 'help_menu' },
+      { text: 'ℹ️ Help / Support', callbackData: 'help_menu' },
     ],
   ];
 
-  const getPaymentPlansKeyboard = (): InlineButton[][] => [
+  const getUnlockedKeyboard = (): InlineButton[][] => [
     [
-      { text: '🌟 1 Month VIP - ₹99', callbackData: 'buy_plan_99' },
+      { text: '🚀 📲 Download ChatMate APK Now', url: config.appDownloadUrl },
     ],
     [
-      { text: '💎 1 Year VIP - ₹499', callbackData: 'buy_plan_499' },
+      { text: '💖 About ChatMate', callbackData: 'about_chatmate' },
+      { text: 'ℹ️ Help Center', callbackData: 'help_menu' },
     ],
-    [
-      { text: '🔙 Back to Main Menu', callbackData: 'main_menu' },
-    ]
   ];
 
   const handleCommandOrText = (rawText: string) => {
@@ -104,7 +105,6 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
 
     const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    // Add user message
     const userMsg: TelegramMessage = {
       id: `u-${Date.now()}`,
       sender: 'user',
@@ -123,288 +123,152 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
       const replyTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       if (lower === '/start') {
-        setLastEvent({
-          type: 'CommandHandler("start")',
-          detail: 'Sent welcome card with Razorpay Payment, Download App, and About buttons.',
-          codeSnippet: `async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):\n    await update.message.reply_text(welcome_text, reply_markup=get_main_keyboard(), parse_mode=ParseMode.HTML)`,
-        });
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `b-${Date.now()}`,
-            sender: 'bot',
-            text: `👋 <b>Welcome to ${config.appName}!</b>\n\n✨ <b>${config.appName}</b> is your ultimate smart messaging app built for speed, privacy, and rich community conversations.\n\n💳 <b>Razorpay Payment Enabled:</b> You can now upgrade your account or make payments directly through official Razorpay (UPI, GPay, PhonePe, Paytm, Cards).\n\n📌 <b>Available Commands:</b>\n• /start - Restart bot and show this welcome menu\n• /pay - Open Razorpay payment portal\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help center\n\n👇 <i>Tap an option below to get started:</i>`,
-            timestamp: replyTime,
-            keyboard: getMainKeyboard(),
-            meta: {
-              handlerType: 'CommandHandler',
-              commandOrQuery: '/start',
-              processingTimeMs: 32,
+        if (hasPaid) {
+          setLastEvent({
+            type: 'CommandHandler("/start") [PAID USER]',
+            detail: 'User has verified ₹300 payment. Granting instant access to official ChatMate download APK.',
+            codeSnippet: `if user_id in paid_users:\n    await update.message.reply_text(unlocked_text, reply_markup=get_unlocked_app_keyboard())`,
+          });
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `b-${Date.now()}`,
+              sender: 'bot',
+              text: `🎉 <b>Welcome back!</b>\n\n✅ <b>Your ChatMate VIP Access is ACTIVE!</b>\nYou have already completed the ₹300 payment.\n\n👇 <i>Tap below to download the latest ChatMate App APK:</i>`,
+              timestamp: replyTime,
+              keyboard: getUnlockedKeyboard(),
             },
-          },
-        ]);
-      } else if (lower === '/pay') {
-        setLastEvent({
-          type: 'CommandHandler("pay")',
-          detail: 'Matched pay_command. Opened Razorpay VIP subscription portal.',
-          codeSnippet: `async def pay_command(update: Update, context: ContextTypes.DEFAULT_TYPE):\n    await update.message.reply_text(pay_intro, reply_markup=get_payment_plans_keyboard(), parse_mode=ParseMode.HTML)`,
-        });
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `b-${Date.now()}`,
-            sender: 'bot',
-            text: `💳 <b>${config.appName} Razorpay Payment Portal</b>\n\nUpgrade to <b>${config.appName} VIP</b> to unlock exclusive benefits:\n• ⚡ Unlimited High-Speed Messaging\n• 🤖 Priority AI Companion Access\n• 🚫 100% Ad-Free Experience\n• 💎 Exclusive VIP Profile Badge\n\n🔒 <i>Payments are secured 100% by Razorpay (UPI, GPay, PhonePe, Cards, NetBanking).</i>\n\nSelect your preferred plan below:`,
-            timestamp: replyTime,
-            keyboard: getPaymentPlansKeyboard(),
-            meta: {
-              handlerType: 'CommandHandler',
-              commandOrQuery: '/pay',
-              processingTimeMs: 28,
+          ]);
+        } else {
+          setLastEvent({
+            type: 'CommandHandler("/start") [PAYWALL ACTIVE]',
+            detail: 'Enforcing ₹300 Razorpay payment. App link is protected until payment verification.',
+            codeSnippet: `payment_url, _ = get_or_create_payment_link(user_id, user_name)\nawait update.message.reply_text(paywall_text, reply_markup=get_payment_required_keyboard(payment_url))`,
+          });
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `b-${Date.now()}`,
+              sender: 'bot',
+              text: `👋 <b>Welcome to ${config.appName}!</b>\n\n🔒 <b>ChatMate Private VIP Access Pass</b>\nTo download the official <b>${config.appName} Application</b>, a one-time activation fee of <b>₹300</b> is required.\n\n✨ <b>What you unlock after ₹300 payment:</b>\n• 📲 <b>Direct APK Download Link</b> (Full Unrestricted Access)\n• ⚡ High-speed lag-free private messaging\n• 🤖 Smart AI Companion & voice filters\n• 💎 Lifetime VIP Membership & zero advertisements\n\n💳 <i>Secure payment handled 100% by Razorpay (Google Pay, PhonePe, Paytm, UPI, Cards, NetBanking).</i>\n\n👇 <b>Step 1:</b> Tap the button below to Pay ₹300\n👇 <b>Step 2:</b> After paying, tap <b>'I Have Paid — Unlock App Link'</b>:`,
+              timestamp: replyTime,
+              keyboard: getLockedKeyboard(),
             },
-          },
-        ]);
-      } else if (lower === '/about') {
-        setLastEvent({
-          type: 'CommandHandler("about")',
-          detail: 'Matched about_command. Displayed app specs and features.',
-          codeSnippet: `async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):\n    await update.message.reply_text(about_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)`,
-        });
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `b-${Date.now()}`,
-            sender: 'bot',
-            text: `💖 <b>About ${config.appName}</b>\n\n${config.appName} is a next-generation social communication app engineered for speed, privacy, and rich conversations.\n\n🌟 <b>Key Features:</b>\n• ⚡ <b>Lightning Fast:</b> Instant messaging with low latency\n• 🔒 <b>Privacy First:</b> End-to-end encrypted messaging\n• 🤖 <b>Smart Assistant:</b> AI-driven chat enhancements\n• 🎨 <b>Custom Themes:</b> Clean dark and light modes\n• 🌐 <b>Cross-Platform:</b> Available on mobile and web\n\nReady to try ${config.appName}? Tap the button below to download the app! 👇`,
-            timestamp: replyTime,
-            keyboard: [
-              [
-                { text: '📲 Download App', url: config.appDownloadUrl },
-                { text: '💳 Pay with Razorpay', callbackData: 'pay_menu' },
-              ],
-              [
-                { text: 'ℹ️ Help', callbackData: 'help_menu' },
-              ]
-            ],
-            meta: {
-              handlerType: 'CommandHandler',
-              commandOrQuery: '/about',
-              processingTimeMs: 38,
-            },
-          },
-        ]);
+          ]);
+        }
       } else if (lower === '/app') {
-        setLastEvent({
-          type: 'CommandHandler("app")',
-          detail: 'Matched app_command. Sent direct link to official download URL.',
-          codeSnippet: `async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE):\n    await update.message.reply_text(app_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)`,
-        });
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `b-${Date.now()}`,
-            sender: 'bot',
-            text: `📲 <b>Download ${config.appName} App</b>\n\nGet the latest version of ${config.appName} for Android with new updates and security features!\n\n🔗 <b>Direct Link:</b> <a href="${config.appDownloadUrl}">${config.appDownloadUrl}</a>\n\nTap the button below to start your download now:`,
-            timestamp: replyTime,
-            keyboard: [
-              [
-                { text: `🚀 Download ${config.appName} APK`, url: config.appDownloadUrl },
-              ],
-              [
-                { text: '💖 About ChatMate', callbackData: 'about_chatmate' },
-                { text: '💳 Razorpay Payment', callbackData: 'pay_menu' },
-              ],
-            ],
-            meta: {
-              handlerType: 'CommandHandler',
-              commandOrQuery: '/app',
-              processingTimeMs: 30,
+        if (hasPaid) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `b-${Date.now()}`,
+              sender: 'bot',
+              text: `📲 <b>Download ChatMate APK:</b>\n<a href="${config.appDownloadUrl}">${config.appDownloadUrl}</a>`,
+              timestamp: replyTime,
+              keyboard: getUnlockedKeyboard(),
             },
-          },
-        ]);
-      } else if (lower === '/help') {
-        setLastEvent({
-          type: 'CommandHandler("help")',
-          detail: 'Matched help_command. Sent command reference guide.',
-          codeSnippet: `async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):\n    await update.message.reply_text(help_text, reply_markup=get_main_keyboard(), parse_mode=ParseMode.HTML)`,
-        });
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `b-${Date.now()}`,
-            sender: 'bot',
-            text: `ℹ️ <b>${config.appName} Help Center</b>\n\nHere are all the ways you can use this bot:\n\n• /start - Launch the bot and view the welcome menu\n• /pay - Open Razorpay payment portal\n• /about - Read about ${config.appName} features and capabilities\n• /app - Receive the official application download link\n• /help - View this help center\n\n💡 <i>Tip: You can also tap the interactive buttons on any message below!</i>`,
-            timestamp: replyTime,
-            keyboard: getMainKeyboard(),
-            meta: {
-              handlerType: 'CommandHandler',
-              commandOrQuery: '/help',
-              processingTimeMs: 31,
+          ]);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `b-${Date.now()}`,
+              sender: 'bot',
+              text: `🔒 <b>ChatMate App Download is Locked</b>\n\nPlease complete the one-time activation payment of <b>₹300</b> to unlock your download link:`,
+              timestamp: replyTime,
+              keyboard: getLockedKeyboard(),
             },
-          },
-        ]);
+          ]);
+        }
       } else {
-        setLastEvent({
-          type: 'MessageHandler(filters.TEXT & ~filters.COMMAND)',
-          detail: `User sent unhandled text "${text}". Friendly fallback prompt triggered.`,
-          codeSnippet: `async def unknown_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):\n    await update.message.reply_text("🤖 I'm here to help...", reply_markup=get_main_keyboard())`,
-        });
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `b-${Date.now()}`,
-            sender: 'bot',
-            text: `🤖 I'm here to help you with <b>${config.appName}</b>!\n\nPlease use the buttons below or type /help or /pay to see all available options.`,
-            timestamp: replyTime,
-            keyboard: getMainKeyboard(),
-            meta: {
-              handlerType: 'MessageHandler',
-              processingTimeMs: 25,
+        if (hasPaid) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `b-${Date.now()}`,
+              sender: 'bot',
+              text: `✅ Your ChatMate account is active! Tap below to download the application:`,
+              timestamp: replyTime,
+              keyboard: getUnlockedKeyboard(),
             },
-          },
-        ]);
+          ]);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `b-${Date.now()}`,
+              sender: 'bot',
+              text: `🔒 Please complete your <b>₹300 payment</b> via Razorpay to unlock the ChatMate application link:`,
+              timestamp: replyTime,
+              keyboard: getLockedKeyboard(),
+            },
+          ]);
+        }
       }
     }, 380);
   };
 
   const handleButtonClick = (button: InlineButton, messageId: string) => {
     if (button.url) {
-      showToast(`🌐 Opening link: ${button.url}`);
+      if (button.url === config.appDownloadUrl) {
+        showToast(`📲 Opening ChatMate App Download: ${button.url}`);
+      } else {
+        showToast(`💳 Opening Razorpay ₹300 Checkout`);
+        // If user tapped pay link in simulator, offer instant simulation unlock!
+        setTimeout(() => {
+          showToast(`💡 Simulated ₹300 payment completed! Tap 'I Have Paid' to unlock.`);
+        }, 1200);
+      }
       window.open(button.url, '_blank', 'noopener,noreferrer');
-      setLastEvent({
-        type: 'InlineKeyboardButton(url=...)',
-        detail: `Opened external checkout/download link: ${button.url}`,
-        codeSnippet: `InlineKeyboardButton("${button.text}", url="${button.url}")`,
-      });
       return;
     }
 
     if (button.callbackData) {
       const data = button.callbackData;
 
-      if (data === 'pay_menu') {
+      if (data === 'verify_payment') {
+        // Toggle/simulate successful payment
+        setHasPaid(true);
         setLastEvent({
-          type: 'CallbackQueryHandler(data="pay_menu")',
-          detail: 'User tapped "💳 Pay with Razorpay". Displaying VIP subscription tiers.',
-          codeSnippet: `if query.data == "pay_menu":\n    await query.edit_message_text(pay_intro, reply_markup=get_payment_plans_keyboard(), parse_mode=ParseMode.HTML)`,
+          type: 'razorpay_client.payment_link.fetch() -> "paid"',
+          detail: 'Razorpay API returned status: "paid" (₹300 received). App download link UNLOCKED!',
+          codeSnippet: `if status == "paid":\n    paid_users.add(user_id)\n    await query.edit_message_text(success_text, reply_markup=get_unlocked_app_keyboard())`,
         });
-        showToast('💳 Opened Razorpay plans portal');
+        showToast('🎉 ₹300 Payment Confirmed! App Download Unlocked!');
 
         setMessages((prev) =>
           prev.map((msg) => {
             if (msg.id === messageId) {
               return {
                 ...msg,
-                text: `💳 <b>${config.appName} Razorpay Payment Portal</b>\n\nChoose a VIP Subscription plan below to upgrade your ${config.appName} experience:\n\n🌟 <b>1 Month VIP:</b> ₹99 (Ad-free, High-speed AI)\n💎 <b>1 Year VIP:</b> ₹499 (Best Value! Save 58%)\n\n🔒 <i>100% Secure Checkout via Razorpay (UPI / GPay / PhonePe / Paytm / Cards / NetBanking).</i>`,
-                keyboard: getPaymentPlansKeyboard(),
-              };
-            }
-            return msg;
-          })
-        );
-      } else if (data === 'buy_plan_99' || data === 'buy_plan_499') {
-        const amount = data === 'buy_plan_99' ? 99 : 499;
-        const planName = amount === 99 ? '1-Month VIP' : '1-Year VIP';
-        const simulatedRzpUrl = `https://rzp.io/l/chatmate-vip-${amount}`;
-
-        setLastEvent({
-          type: 'create_razorpay_payment_link()',
-          detail: `Generated live Razorpay Payment Link for ${planName} (₹${amount}) with Key ID rzp_live_TlLpKTsB7MoXPp`,
-          codeSnippet: `link = razorpay_client.payment_link.create({\n    "amount": ${amount * 100},\n    "currency": "INR",\n    "description": "${config.appName} ${planName}"\n})`,
-        });
-        showToast(`⚡ Razorpay Link Generated: ₹${amount}`);
-
-        setMessages((prev) =>
-          prev.map((msg) => {
-            if (msg.id === messageId) {
-              return {
-                ...msg,
-                text: `🎉 <b>Ready to complete your payment!</b>\n\n📦 <b>Plan:</b> ${planName}\n💰 <b>Amount:</b> ₹${amount}\n🔒 <b>Gateway:</b> Razorpay Live API\n\nTap the button below to pay securely via <b>Razorpay</b> (UPI, GPay, PhonePe, Cards, NetBanking):`,
-                keyboard: [
-                  [
-                    { text: `🚀 Pay ₹${amount} via Razorpay (UPI / Cards)`, url: simulatedRzpUrl },
-                  ],
-                  [
-                    { text: '🔙 Back to Plans', callbackData: 'pay_menu' },
-                    { text: '🏠 Main Menu', callbackData: 'main_menu' },
-                  ]
-                ],
+                text: `🎉 <b>PAYMENT VERIFIED SUCCESSFULLY!</b>\n\nThank you, <b>Alex</b>! Your <b>₹300</b> payment has been received and verified via Razorpay.\n\n🔓 <b>Your ChatMate App Download is now UNLOCKED!</b>\n\n🔗 <b>Official APK:</b> <a href="${config.appDownloadUrl}">${config.appDownloadUrl}</a>\n\n👇 Tap below to start your APK download:`,
+                keyboard: getUnlockedKeyboard(),
               };
             }
             return msg;
           })
         );
       } else if (data === 'about_chatmate') {
-        setLastEvent({
-          type: 'CallbackQueryHandler(data="about_chatmate")',
-          detail: 'User tapped "💖 About ChatMate". Message in-place edited via query.edit_message_text().',
-          codeSnippet: `if query.data == "about_chatmate":\n    await query.edit_message_text(about_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)`,
-        });
-        showToast('⚡ Answered callback query: "about_chatmate"');
-
         setMessages((prev) =>
           prev.map((msg) => {
             if (msg.id === messageId) {
               return {
                 ...msg,
-                text: `💖 <b>About ${config.appName}</b>\n\n${config.appName} is designed to make your daily conversations smoother, faster, and smarter!\n\n✨ <b>Highlights:</b>\n• End-to-end security & user privacy\n• Smart message translation & AI companion\n• High-definition voice & video quality\n• Low battery & lightweight data consumption\n\n👇 <i>Ready to join? Download or upgrade below:</i>`,
-                keyboard: [
-                  [
-                    { text: '📲 Download App', url: config.appDownloadUrl },
-                    { text: '💳 Pay with Razorpay', callbackData: 'pay_menu' },
-                  ],
-                  [
-                    { text: '🔙 Back to Main Menu', callbackData: 'main_menu' },
-                  ],
-                ],
+                text: `💖 <b>About ChatMate</b>\n\nChatMate is a next-generation social communication app engineered for speed, privacy, and rich conversations.\n\n🌟 <b>Key Features:</b>\n• ⚡ <b>Lightning Fast:</b> Instant messaging with zero lag\n• 🔒 <b>Privacy First:</b> End-to-end encrypted messaging\n• 🤖 <b>Smart Assistant:</b> AI-driven chat enhancements\n• 🎨 <b>Custom Themes:</b> Clean dark and light modes\n\n💰 <b>Access Fee:</b> One-time ₹300 activation payment.\n\nTap below to proceed with payment:`,
+                keyboard: hasPaid ? getUnlockedKeyboard() : getLockedKeyboard(),
               };
             }
             return msg;
           })
         );
       } else if (data === 'help_menu') {
-        setLastEvent({
-          type: 'CallbackQueryHandler(data="help_menu")',
-          detail: 'User tapped "ℹ️ Help". Displayed Help Center with app guidance.',
-          codeSnippet: `elif query.data == "help_menu":\n    await query.edit_message_text(help_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode=ParseMode.HTML)`,
-        });
-        showToast('⚡ Answered callback query: "help_menu"');
-
         setMessages((prev) =>
           prev.map((msg) => {
             if (msg.id === messageId) {
               return {
                 ...msg,
-                text: `ℹ️ <b>${config.appName} Help Center</b>\n\nWelcome to the help section! Need guidance on how to use ${config.appName}?\n\n• <b>Download App:</b> Tap '📲 Download App' or use /app to download the APK.\n• <b>Razorpay Payment:</b> Tap '💳 Pay with Razorpay' or use /pay to upgrade.\n• <b>Features:</b> Tap '💖 About ChatMate' or use /about to see feature details.\n• <b>Commands:</b> Use /start to refresh the menu anytime.\n\nTap below to choose an action:`,
-                keyboard: [
-                  [
-                    { text: '📲 Download App', url: config.appDownloadUrl },
-                    { text: '💳 Pay with Razorpay', callbackData: 'pay_menu' },
-                  ],
-                  [
-                    { text: '🔙 Back to Main Menu', callbackData: 'main_menu' },
-                  ],
-                ],
-              };
-            }
-            return msg;
-          })
-        );
-      } else if (data === 'main_menu') {
-        setLastEvent({
-          type: 'CallbackQueryHandler(data="main_menu")',
-          detail: 'Navigated back to root menu.',
-          codeSnippet: `elif query.data == "main_menu":\n    await query.edit_message_text(welcome_text, reply_markup=get_main_keyboard())`,
-        });
-        showToast('⚡ Main menu restored');
-
-        setMessages((prev) =>
-          prev.map((msg) => {
-            if (msg.id === messageId) {
-              return {
-                ...msg,
-                text: `👋 <b>${config.appName} Main Menu</b>\n\nWelcome back! What would you like to explore today?\n\n• /pay - Razorpay payment portal\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help guide`,
-                keyboard: getMainKeyboard(),
+                text: `ℹ️ <b>ChatMate Help & Payment Support</b>\n\n• <b>Why pay ₹300?</b> ChatMate runs dedicated high-speed encrypted servers with VIP AI companion features.\n• <b>Payment Methods:</b> All UPI apps (Google Pay, PhonePe, Paytm), BHIM, Credit/Debit Cards, NetBanking.\n• <b>Instant Unlock:</b> As soon as your ₹300 payment is received, the app download link unlocks automatically!`,
+                keyboard: hasPaid ? getUnlockedKeyboard() : getLockedKeyboard(),
               };
             }
             return msg;
@@ -415,13 +279,14 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
   };
 
   const handleReset = () => {
+    setHasPaid(false);
     setMessages([
       {
         id: `init-${Date.now()}`,
         sender: 'bot',
-        text: `👋 <b>Welcome to ${config.appName}, Alex!</b>\n\n✨ <b>${config.appName}</b> is your ultimate smart messaging app built for speed, privacy, and rich community conversations.\n\n💳 <b>Razorpay Payment Enabled:</b> You can now upgrade your account or make payments directly through official Razorpay (UPI, GPay, PhonePe, Paytm, Cards).\n\n📌 <b>Available Commands:</b>\n• /start - Restart bot and show this welcome menu\n• /pay - Open Razorpay payment portal\n• /about - Learn more about ${config.appName}\n• /app - Get the direct app download link\n• /help - Display the help center\n\n👇 <i>Tap an option below to get started:</i>`,
+        text: `👋 <b>Welcome to ${config.appName}, Alex!</b>\n\n🔒 <b>ChatMate Private VIP Access Pass</b>\nTo download the official <b>${config.appName} Application</b>, a one-time activation fee of <b>₹300</b> is required.\n\n✨ <b>What you unlock after ₹300 payment:</b>\n• 📲 <b>Direct APK Download Link</b> (Full Unrestricted Access)\n• ⚡ High-speed lag-free private messaging\n• 🤖 Smart AI Companion & voice filters\n• 💎 Lifetime VIP Membership & zero advertisements\n\n💳 <i>Secure payment handled 100% by Razorpay (Google Pay, PhonePe, Paytm, UPI, Cards, NetBanking).</i>\n\n👇 <b>Step 1:</b> Tap the button below to Pay ₹300\n👇 <b>Step 2:</b> After paying, tap <b>'I Have Paid — Unlock App Link'</b>:`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        keyboard: getMainKeyboard(),
+        keyboard: getLockedKeyboard(),
         meta: {
           handlerType: 'CommandHandler',
           commandOrQuery: '/start',
@@ -429,7 +294,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
         },
       },
     ]);
-    showToast('🔄 Simulator reset to fresh /start session');
+    showToast('🔄 Reset to locked ₹300 paywall state');
   };
 
   return (
@@ -456,12 +321,17 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-slate-100 text-sm tracking-tight">{config.appName} Bot</span>
-                <span className="text-[10px] font-mono uppercase bg-emerald-950 text-emerald-400 border border-emerald-800/60 px-1.5 py-0.2 rounded">
-                  Razorpay Live
+                <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border flex items-center gap-1 ${
+                  hasPaid
+                    ? 'bg-emerald-950 text-emerald-400 border-emerald-800/60'
+                    : 'bg-amber-950 text-amber-300 border-amber-800/60'
+                }`}>
+                  {hasPaid ? <Unlock className="w-2.5 h-2.5" /> : <Lock className="w-2.5 h-2.5" />}
+                  <span>{hasPaid ? 'Access Unlocked' : '₹300 Paywall Active'}</span>
                 </span>
               </div>
               <div className="text-xs text-slate-400 flex items-center gap-1.5">
-                <span>VIP & Payments Enabled</span>
+                <span>ChatMate VIP Gatekeeper</span>
                 <span>·</span>
                 <span className="text-sky-400 font-mono text-[11px]">@ChatMateAppBot</span>
               </div>
@@ -471,7 +341,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
           <div className="flex items-center gap-2">
             <button
               onClick={handleReset}
-              title="Reset conversation"
+              title="Reset conversation and lock state"
               className="p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
@@ -523,14 +393,18 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
                         <button
                           key={bIdx}
                           onClick={() => handleButtonClick(btn, msg.id)}
-                          className={`border text-xs font-medium py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm whitespace-nowrap cursor-pointer ${
-                            btn.text.includes('Pay') || btn.text.includes('₹')
-                              ? 'bg-emerald-950/80 hover:bg-emerald-900/60 text-emerald-200 border-emerald-700/70'
-                              : 'bg-slate-800/90 hover:bg-sky-900/40 text-slate-200 hover:text-sky-200 border-slate-700/80 hover:border-sky-500/50'
+                          className={`border text-xs font-medium py-2.5 px-3 rounded-lg flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] shadow-sm whitespace-nowrap cursor-pointer ${
+                            btn.text.includes('Pay ₹300')
+                              ? 'bg-amber-950/80 hover:bg-amber-900/70 text-amber-200 border-amber-600/70 font-semibold'
+                              : btn.text.includes('Verify') || btn.text.includes('Paid')
+                              ? 'bg-emerald-950/80 hover:bg-emerald-900/70 text-emerald-200 border-emerald-600/70 font-semibold'
+                              : btn.text.includes('Download')
+                              ? 'bg-sky-600 hover:bg-sky-500 text-white border-sky-400 font-bold shadow-lg'
+                              : 'bg-slate-800/90 hover:bg-slate-700/80 text-slate-200 border-slate-700/80'
                           }`}
                         >
                           <span>{btn.text}</span>
-                          {btn.url && <ExternalLink className="w-3 h-3 opacity-70 shrink-0" />}
+                          {btn.url && <ExternalLink className="w-3 h-3 opacity-80 shrink-0" />}
                         </button>
                       ))}
                     </div>
@@ -543,7 +417,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
           {isTyping && (
             <div className="flex items-center gap-2 text-xs text-slate-400 pl-2">
               <span className="inline-block w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
-              <span>{config.appName} Bot is typing...</span>
+              <span>{config.appName} Bot is checking...</span>
             </div>
           )}
 
@@ -553,7 +427,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
         {/* Quick Command Pills */}
         <div className="px-4 py-2 bg-slate-900/90 border-t border-slate-800 flex items-center gap-2 overflow-x-auto text-xs text-slate-400 scrollbar-none">
           <span className="text-[11px] uppercase tracking-wider text-slate-400 shrink-0">Commands:</span>
-          {['/start', '/pay', '/about', '/app', '/help'].map((cmd) => (
+          {['/start', '/app'].map((cmd) => (
             <button
               key={cmd}
               onClick={() => handleCommandOrText(cmd)}
@@ -562,6 +436,15 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
               {cmd}
             </button>
           ))}
+          <button
+            onClick={() => {
+              setHasPaid(!hasPaid);
+              showToast(hasPaid ? '🔒 Status toggled to: UNPAID' : '🔓 Status toggled to: PAID');
+            }}
+            className="ml-auto px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded border border-amber-800/50 transition-colors text-[11px] cursor-pointer"
+          >
+            {hasPaid ? 'Simulate Unpaid' : 'Simulate Paid'}
+          </button>
         </div>
 
         {/* Telegram Input Bar */}
@@ -576,7 +459,7 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type /start, /pay, /about, /app, /help..."
+            placeholder="Type /start or a message..."
             className="flex-1 bg-slate-950/80 border border-slate-800 focus:border-sky-500 rounded-lg px-4 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors"
           />
           <button
@@ -596,10 +479,14 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
           <div className="flex items-center justify-between pb-3 border-b border-slate-800">
             <div className="flex items-center gap-2">
               <Terminal className="w-4 h-4 text-sky-400" />
-              <h3 className="font-semibold text-slate-100 text-sm">Bot Engine Event Inspector</h3>
+              <h3 className="font-semibold text-slate-100 text-sm">Paywall Engine Telemetry</h3>
             </div>
-            <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded">
-              Razorpay API Active
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+              hasPaid
+                ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/40'
+                : 'text-amber-300 bg-amber-950/60 border-amber-800/40'
+            }`}>
+              {hasPaid ? 'Access Granted' : 'Locked (Fee: ₹300)'}
             </span>
           </div>
 
@@ -627,52 +514,32 @@ export const TelegramSimulator: React.FC<Props> = ({ config }) => {
           </div>
         </div>
 
-        {/* Razorpay Gateway Status Card */}
+        {/* Paywall Rules Card */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4">
           <div className="flex items-center gap-2 text-slate-100 font-semibold text-sm">
-            <CreditCard className="w-4 h-4 text-emerald-400" />
-            <span>Razorpay Payment Gateway Config</span>
+            <CreditCard className="w-4 h-4 text-amber-400" />
+            <span>ChatMate ₹300 Paywall Rules</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-              <span className="text-slate-400 block text-[11px]">Razorpay Key ID</span>
-              <span className="font-mono text-sky-300 font-medium">rzp_live_TlLpKTsB7...</span>
+          <div className="space-y-2 text-xs text-slate-300">
+            <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
+              <span className="font-semibold text-slate-200 block mb-1">1. User sends /start</span>
+              <span className="text-slate-400 text-[11px]">
+                Bot checks if user has paid. If not, it creates a <b>₹300 Razorpay link</b> and locks the app download.
+              </span>
             </div>
-            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-              <span className="text-slate-400 block text-[11px]">Payment Modes</span>
-              <span className="font-medium text-emerald-300">UPI, Cards, NetBanking</span>
+            <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
+              <span className="font-semibold text-slate-200 block mb-1">2. User completes payment</span>
+              <span className="text-slate-400 text-[11px]">
+                User pays via GPay, PhonePe, Paytm, Cards, or UPI on Razorpay.
+              </span>
             </div>
-            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-              <span className="text-slate-400 block text-[11px]">1 Month VIP</span>
-              <span className="font-semibold text-slate-200">₹99</span>
+            <div className="bg-slate-950 p-3 rounded-lg border border-slate-800">
+              <span className="font-semibold text-emerald-400 block mb-1">3. App Link Unlocked</span>
+              <span className="text-slate-400 text-[11px]">
+                Bot verifies payment and immediately delivers the official APK link: <code className="text-sky-300">{config.appDownloadUrl}</code>.
+              </span>
             </div>
-            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-              <span className="text-slate-400 block text-[11px]">1 Year VIP</span>
-              <span className="font-semibold text-slate-200">₹499 (Save 58%)</span>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-800 pt-3">
-            <span className="text-xs font-semibold text-slate-300 block mb-2">Active Buttons on /start:</span>
-            <ul className="space-y-1.5 text-xs text-slate-300">
-              <li className="flex items-center gap-2">
-                <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span><b>💖 About ChatMate</b> - Features & specs</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span><b>📲 Download App</b> - Official link (<code className="text-sky-300">{config.appDownloadUrl}</code>)</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span><b>💳 Pay with Razorpay</b> - Instant UPI & Card checkout links</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span><b>ℹ️ Help</b> - Help & commands center</span>
-              </li>
-            </ul>
           </div>
         </div>
       </div>

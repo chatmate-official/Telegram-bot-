@@ -4,14 +4,16 @@ import { BotConfig } from '../types';
 export function generateBotPy(config: BotConfig): string {
   return `#!/usr/bin/env python3
 """
-ChatMate Telegram Bot (Render 24/7 + Razorpay Payment Integration)
-==================================================================
-A feature-packed Telegram Bot for ${config.appName}.
-Includes:
-- Embedded HTTP health-check server for Render 24/7 uptime.
-- Real-time Razorpay Payment Link generation (UPI, Cards, NetBanking).
-- Inline action buttons: About, Download App, Pay with Razorpay, Help.
-- Commands: /start, /pay, /about, /app, /help.
+ChatMate Telegram Bot - Paid Access Paywall (₹300)
+=================================================
+Workflow:
+1. User sends /start.
+2. Bot immediately requires ₹300 payment to unlock the ChatMate App.
+3. Bot generates a dynamic Razorpay Payment Link (₹300) supporting UPI, GPay, PhonePe, Cards.
+4. User clicks 'Pay ₹300' and completes the transaction.
+5. User clicks '✅ Check / Verify Payment'.
+6. Once payment is verified, bot UNLOCKS and provides the official App Download link:
+   ${config.appDownloadUrl}
 
 Requirements:
     pip install python-telegram-bot python-dotenv razorpay
@@ -21,6 +23,7 @@ import os
 import sys
 import logging
 import threading
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from dotenv import load_dotenv
 
@@ -36,7 +39,7 @@ from telegram.ext import (
     filters,
 )
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
 # Configure logging
@@ -48,15 +51,22 @@ logger = logging.getLogger("ChatMateBot")
 
 # Constants & Configuration
 APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "${config.appDownloadUrl}")
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_live_TlLpKTsB7MoXPp")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
+ACCESS_FEE_INR = 300  # Exact ₹300 required access fee
 
-# Initialize Razorpay Client if credentials are provided
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_live_TlLpKTsB7MoXPp")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "70oNNW8Uj5ncuuEco3W1PHzn")
+
+# In-memory storage for active payment links & unlocked users
+user_payment_links: dict[int, str] = {}    # user_id -> payment_link_id
+user_payment_urls: dict[int, str] = {}     # user_id -> short_url
+paid_users: set[int] = set()               # user_ids who successfully paid ₹300
+
+# Initialize Razorpay Client
 razorpay_client = None
 if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
     try:
         razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
-        logger.info("Razorpay Client successfully initialized with Live API credentials.")
+        logger.info("Razorpay Client initialized with Live API credentials.")
     except Exception as e:
         logger.warning(f"Could not initialize Razorpay Client: {e}")
 
@@ -65,19 +75,19 @@ if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
 # Lightweight HTTP Health Server (Satisfies Render Web Service Port Scan)
 # ---------------------------------------------------------------------------
 class HealthCheckHandler(BaseHTTPRequestHandler):
-    """Answers Render's port probe so the web service stays Live 24/7."""
+    """Answers Render's port probe so the service stays Live 24/7."""
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"${config.appName} Bot + Razorpay is active and running 24/7!")
+        self.wfile.write(b"${config.appName} Paywall Bot (300 INR) is active and running 24/7!")
 
     def log_message(self, format, *args):
         return
 
 
 def start_health_server() -> None:
-    """Runs web server in a daemon background thread."""
+    """Runs web server in a background thread."""
     try:
         port = int(os.getenv("PORT", 10000))
         server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
@@ -88,25 +98,30 @@ def start_health_server() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Razorpay Dynamic Payment Link Generator
+# Razorpay Payment Link Generator & Verifier
 # ---------------------------------------------------------------------------
-def create_razorpay_payment_link(amount_in_rupees: int, plan_name: str, user_name: str) -> str | None:
+def get_or_create_payment_link(user_id: int, user_name: str) -> tuple[str | None, str | None]:
     """
-    Creates a dynamic payment link using Razorpay API.
-    Supports UPI (Google Pay, PhonePe, Paytm), Credit/Debit Cards, NetBanking.
+    Creates or retrieves an existing ₹300 Razorpay Payment Link for the user.
     """
+    if user_id in user_payment_urls and user_id in user_payment_links:
+        return user_payment_urls[user_id], user_payment_links[user_id]
+
     if not razorpay_client:
-        return None
+        simulated_url = f"https://rzp.io/l/chatmate-300-access"
+        return simulated_url, "sim_link_300"
 
     try:
-        amount_paise = amount_in_rupees * 100
+        amount_paise = ACCESS_FEE_INR * 100
+        ref_id = f"chatmate_uid_{user_id}_{int(time.time())}"
+
         payment_data = {
             "amount": amount_paise,
             "currency": "INR",
             "accept_partial": False,
-            "description": f"${config.appName} {plan_name} - {user_name}",
+            "description": f"${config.appName} VIP App Access Pass - ₹{ACCESS_FEE_INR}",
             "customer": {
-                "name": user_name,
+                "name": user_name or f"User_{user_id}",
             },
             "notify": {
                 "sms": False,
@@ -115,201 +130,155 @@ def create_razorpay_payment_link(amount_in_rupees: int, plan_name: str, user_nam
             "reminder_enable": True,
             "notes": {
                 "app": "${config.appName}",
-                "plan": plan_name,
-                "user": user_name
-            }
+                "purpose": "App_Download_Unlock",
+                "telegram_user_id": str(user_id)
+            },
+            "reference_id": ref_id
         }
+
         link_response = razorpay_client.payment_link.create(payment_data)
-        payment_url = link_response.get("short_url")
-        logger.info(f"Generated Razorpay link: {payment_url} for {user_name} ({plan_name})")
-        return payment_url
+        link_id = link_response.get("id")
+        short_url = link_response.get("short_url")
+
+        if link_id and short_url:
+            user_payment_links[user_id] = link_id
+            user_payment_urls[user_id] = short_url
+            logger.info(f"Created ₹300 Payment Link for user {user_id}: {short_url}")
+            return short_url, link_id
+
     except Exception as e:
-        logger.error(f"Failed to create Razorpay payment link: {e}")
-        return None
+        logger.error(f"Error creating Razorpay payment link: {e}")
+
+    return None, None
+
+
+def check_razorpay_payment_status(user_id: int) -> bool:
+    """
+    Checks with Razorpay API whether the user's payment link has been paid.
+    """
+    if user_id in paid_users:
+        return True
+
+    link_id = user_payment_links.get(user_id)
+    if not link_id or not razorpay_client:
+        return False
+
+    try:
+        link_status = razorpay_client.payment_link.fetch(link_id)
+        status = link_status.get("status")
+        logger.info(f"Checking link {link_id} for user {user_id}. Status: {status}")
+
+        if status == "paid":
+            paid_users.add(user_id)
+            return True
+    except Exception as e:
+        logger.error(f"Error verifying payment with Razorpay: {e}")
+
+    return False
 
 
 # ---------------------------------------------------------------------------
 # Keyboards
 # ---------------------------------------------------------------------------
-def get_main_keyboard() -> InlineKeyboardMarkup:
+def get_payment_required_keyboard(payment_url: str) -> InlineKeyboardMarkup:
     """
-    Main inline keyboard with:
-    - 💖 About ChatMate
-    - 📲 Download App
-    - 💳 Pay with Razorpay
-    - ℹ️ Help
+    Keyboard shown when access is locked. Requires ₹300 payment.
     """
     keyboard = [
         [
-            InlineKeyboardButton("💖 About ChatMate", callback_data="about_chatmate"),
-            InlineKeyboardButton("📲 Download App", url=APP_DOWNLOAD_URL),
+            InlineKeyboardButton(f"💳 Pay ₹{ACCESS_FEE_INR} via Razorpay (UPI / GPay / Cards)", url=payment_url),
         ],
         [
-            InlineKeyboardButton("💳 Pay with Razorpay", callback_data="pay_menu"),
+            InlineKeyboardButton("✅ I Have Paid — Unlock App Link", callback_data="verify_payment"),
         ],
         [
-            InlineKeyboardButton("ℹ️ Help", callback_data="help_menu"),
-        ],
+            InlineKeyboardButton("💖 About ${config.appName}", callback_data="about_chatmate"),
+            InlineKeyboardButton("ℹ️ Help / Support", callback_data="help_menu"),
+        ]
     ]
     return InlineKeyboardMarkup(keyboard)
 
 
-def get_payment_plans_keyboard() -> InlineKeyboardMarkup:
-    """Keyboard offering subscription tiers."""
+def get_unlocked_app_keyboard() -> InlineKeyboardMarkup:
+    """
+    Keyboard shown ONLY after user pays ₹300. Download link is granted!
+    """
     keyboard = [
         [
-            InlineKeyboardButton("🌟 1 Month VIP - ₹99", callback_data="buy_plan_99"),
+            InlineKeyboardButton("🚀 📲 Download ${config.appName} APK Now", url=APP_DOWNLOAD_URL),
         ],
         [
-            InlineKeyboardButton("💎 1 Year VIP - ₹499", callback_data="buy_plan_499"),
-        ],
-        [
-            InlineKeyboardButton("🔙 Back to Main Menu", callback_data="main_menu"),
+            InlineKeyboardButton("💖 About ${config.appName}", callback_data="about_chatmate"),
+            InlineKeyboardButton("ℹ️ Help Center", callback_data="help_menu"),
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
 
 
 # ---------------------------------------------------------------------------
-# Command Handlers
+# Handlers
 # ---------------------------------------------------------------------------
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles /start: Welcomes user with functional action buttons."""
+    """
+    Handles /start command.
+    Checks if user has already paid ₹300:
+    - If paid -> Gives direct app download link.
+    - If not paid -> Immediately presents the ₹300 paywall to proceed.
+    """
     user = update.effective_user
-    user_name = user.first_name if user else "Friend"
+    if not user:
+        return
 
-    welcome_text = (
+    user_name = user.first_name or "Friend"
+    user_id = user.id
+
+    # Check if already paid
+    if user_id in paid_users:
+        unlocked_text = (
+            f"🎉 <b>Welcome back, {user_name}!</b>\\n\\n"
+            "✅ <b>Your ${config.appName} VIP Access is ACTIVE!</b>\\n"
+            "You have already paid the ₹300 activation fee.\\n\\n"
+            "👇 <i>Tap the button below to download the latest ${config.appName} App:</i>"
+        )
+        if update.message:
+            await update.message.reply_text(
+                text=unlocked_text,
+                reply_markup=get_unlocked_app_keyboard(),
+                parse_mode=ParseMode.HTML,
+            )
+        return
+
+    # User has NOT paid -> Generate ₹300 payment link
+    payment_url, _ = get_or_create_payment_link(user_id, user_name)
+    if not payment_url:
+        payment_url = f"https://rzp.io/l/chatmate-300-access"
+
+    paywall_text = (
         f"👋 <b>Welcome to ${config.appName}, {user_name}!</b>\\n\\n"
-        "✨ <b>${config.appName}</b> is your ultimate smart messaging app built for speed, "
-        "privacy, and rich community conversations.\\n\\n"
-        "💳 <b>Razorpay Payment Enabled:</b> You can now upgrade your account or make payments directly through official Razorpay (UPI, GPay, PhonePe, Paytm, Cards).\\n\\n"
-        "📌 <b>Available Commands:</b>\\n"
-        "• /start - Restart bot and show this welcome menu\\n"
-        "• /pay - Open Razorpay payment portal\\n"
-        "• /about - Learn more about ${config.appName}\\n"
-        "• /app - Get the direct app download link\\n"
-        "• /help - Display the help center\\n\\n"
-        "👇 <i>Tap an option below to get started:</i>"
+        "🔒 <b>${config.appName} Private VIP Access</b>\\n"
+        f"To download the official <b>${config.appName} Application</b>, an activation fee of <b>₹{ACCESS_FEE_INR}</b> is required.\\n\\n"
+        f"✨ <b>What you unlock after ₹{ACCESS_FEE_INR} payment:</b>\\n"
+        "• 📲 <b>Direct APK Download Link</b> (Full Unrestricted Access)\\n"
+        "• ⚡ High-speed lag-free private messaging\\n"
+        "• 🤖 Smart AI Companion & voice filters\\n"
+        "• 💎 Lifetime VIP Membership & zero advertisements\\n\\n"
+        "💳 <i>Secure payment handled 100% by Razorpay (Google Pay, PhonePe, Paytm, UPI, Cards, NetBanking).</i>\\n\\n"
+        "👇 <b>Step 1:</b> Tap the button below to Pay ₹300\\n"
+        "👇 <b>Step 2:</b> After paying, tap <b>'I Have Paid — Unlock App Link'</b>:"
     )
 
     if update.message:
         await update.message.reply_text(
-            text=welcome_text,
-            reply_markup=get_main_keyboard(),
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True,
-        )
-
-
-async def pay_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles /pay command."""
-    pay_intro = (
-        "💳 <b>${config.appName} Razorpay Payment Portal</b>\\n\\n"
-        "Upgrade to <b>${config.appName} VIP</b> to unlock exclusive benefits:\\n"
-        "• ⚡ Unlimited High-Speed Messaging\\n"
-        "• 🤖 Priority AI Companion Access\\n"
-        "• 🚫 100% Ad-Free Experience\\n"
-        "• 💎 Exclusive VIP Profile Badge\\n\\n"
-        "🔒 <i>Payments are secured 100% by Razorpay (UPI, GPay, PhonePe, Cards, NetBanking).</i>\\n\\n"
-        "Select your preferred plan below:"
-    )
-
-    if update.message:
-        await update.message.reply_text(
-            text=pay_intro,
-            reply_markup=get_payment_plans_keyboard(),
+            text=paywall_text,
+            reply_markup=get_payment_required_keyboard(payment_url),
             parse_mode=ParseMode.HTML,
         )
 
 
-async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles /about command."""
-    about_text = (
-        "💖 <b>About ${config.appName}</b>\\n\\n"
-        "${config.appName} is a next-generation social communication app engineered for speed, "
-        "privacy, and rich conversations.\\n\\n"
-        "🌟 <b>Key Features:</b>\\n"
-        "• ⚡ <b>Lightning Fast:</b> Instant messaging with low latency\\n"
-        "• 🔒 <b>Privacy First:</b> End-to-end encrypted messaging\\n"
-        "• 🤖 <b>Smart Assistant:</b> AI-driven chat enhancements\\n"
-        "• 🎨 <b>Custom Themes:</b> Clean dark and light modes\\n"
-        "• 🌐 <b>Cross-Platform:</b> Available on mobile and web\\n\\n"
-        "Ready to try ${config.appName}? Tap the button below to download the app! 👇"
-    )
-
-    keyboard = [
-        [
-            InlineKeyboardButton("📲 Download App", url=APP_DOWNLOAD_URL),
-            InlineKeyboardButton("💳 Pay with Razorpay", callback_data="pay_menu"),
-        ],
-        [
-            InlineKeyboardButton("ℹ️ Help", callback_data="help_menu"),
-        ]
-    ]
-
-    if update.message:
-        await update.message.reply_text(
-            text=about_text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True,
-        )
-
-
-async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles /app command."""
-    app_text = (
-        "📲 <b>Download ${config.appName} App</b>\\n\\n"
-        "Get the latest version of ${config.appName} for Android with new updates and security features!\\n\\n"
-        f"🔗 <b>Direct Link:</b> <a href=\\"{APP_DOWNLOAD_URL}\\">{APP_DOWNLOAD_URL}</a>\\n\\n"
-        "Tap the button below to start your download now:"
-    )
-
-    keyboard = [
-        [
-            InlineKeyboardButton("🚀 Download ${config.appName} APK", url=APP_DOWNLOAD_URL),
-        ],
-        [
-            InlineKeyboardButton("💖 About ChatMate", callback_data="about_chatmate"),
-            InlineKeyboardButton("💳 Razorpay Payment", callback_data="pay_menu"),
-        ]
-    ]
-
-    if update.message:
-        await update.message.reply_text(
-            text=app_text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=False,
-        )
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles /help command."""
-    help_text = (
-        "ℹ️ <b>${config.appName} Help Center</b>\\n\\n"
-        "Here are all the ways you can use this bot:\\n\\n"
-        "• /start - Launch the bot and view the welcome menu\\n"
-        "• /pay - Open the Razorpay payment portal\\n"
-        "• /about - Read about ${config.appName} features and capabilities\\n"
-        "• /app - Receive the official application download link\\n"
-        "• /help - View this help center\\n\\n"
-        "💡 <i>Tip: You can also tap the interactive buttons on any message below!</i>"
-    )
-
-    if update.message:
-        await update.message.reply_text(
-            text=help_text,
-            reply_markup=get_main_keyboard(),
-            parse_mode=ParseMode.HTML,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Callback Query Handler
-# ---------------------------------------------------------------------------
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles inline button clicks for About, Pay, Plans, Help, and Navigation."""
+    """
+    Handles inline button clicks (Verify Payment, About, Help, etc.)
+    """
     query = update.callback_query
     if not query:
         return
@@ -317,139 +286,144 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
     data = query.data
     user = update.effective_user
-    user_name = user.first_name if user else "User"
+    if not user:
+        return
 
-    if data == "pay_menu":
-        pay_intro = (
-            "💳 <b>${config.appName} Razorpay Payment Portal</b>\\n\\n"
-            "Choose a VIP Subscription plan below to upgrade your ${config.appName} experience:\\n\\n"
-            "🌟 <b>1 Month VIP:</b> ₹99 (Ad-free, High-speed AI)\\n"
-            "💎 <b>1 Year VIP:</b> ₹499 (Best Value! Save 58%)\\n\\n"
-            "🔒 <i>100% Secure Checkout via Razorpay (UPI / GPay / PhonePe / Paytm / Cards / NetBanking).</i>"
-        )
-        await query.edit_message_text(
-            text=pay_intro,
-            reply_markup=get_payment_plans_keyboard(),
-            parse_mode=ParseMode.HTML,
-        )
+    user_name = user.first_name or "Friend"
+    user_id = user.id
 
-    elif data in ("buy_plan_99", "buy_plan_499"):
-        amount = 99 if data == "buy_plan_99" else 499
-        plan_name = "1-Month VIP" if amount == 99 else "1-Year VIP"
+    if data == "verify_payment":
+        is_paid = check_razorpay_payment_status(user_id)
 
-        payment_url = create_razorpay_payment_link(amount, plan_name, user_name)
-
-        if payment_url:
-            text = (
-                f"🎉 <b>Ready to complete your payment!</b>\\n\\n"
-                f"📦 <b>Plan:</b> {plan_name}\\n"
-                f"💰 <b>Amount:</b> ₹{amount}\\n"
-                f"👤 <b>Customer:</b> {user_name}\\n\\n"
-                "Tap the button below to pay securely via <b>Razorpay</b> (UPI, GPay, PhonePe, Cards, NetBanking):"
+        if is_paid:
+            success_text = (
+                f"🎉 <b>PAYMENT VERIFIED SUCCESSFULLY!</b>\\n\\n"
+                f"Thank you, <b>{user_name}</b>! Your ₹{ACCESS_FEE_INR} payment has been received and confirmed.\\n\\n"
+                f"🔓 <b>Your ${config.appName} App Download is now UNLOCKED!</b>\\n\\n"
+                f"🔗 <b>Download Link:</b> <a href=\\"{APP_DOWNLOAD_URL}\\">{APP_DOWNLOAD_URL}</a>\\n\\n"
+                "👇 Tap below to start your APK download:"
             )
-            keyboard = [
-                [
-                    InlineKeyboardButton(f"🚀 Pay ₹{amount} via Razorpay", url=payment_url),
-                ],
-                [
-                    InlineKeyboardButton("🔙 Back to Plans", callback_data="pay_menu"),
-                    InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu"),
-                ]
-            ]
+            await query.edit_message_text(
+                text=success_text,
+                reply_markup=get_unlocked_app_keyboard(),
+                parse_mode=ParseMode.HTML,
+            )
         else:
-            text = (
-                f"💳 <b>Razorpay Payment: {plan_name} (₹{amount})</b>\\n\\n"
-                f"Razorpay Key ID: <code>{RAZORPAY_KEY_ID}</code>\\n\\n"
-                "⚠️ <i>Please ensure RAZORPAY_KEY_SECRET is added to your environment variables on Render to enable instant dynamic link generation.</i>\\n\\n"
-                "Tap below to return to the plans menu:"
-            )
-            keyboard = [
-                [
-                    InlineKeyboardButton("🔙 Back to Plans", callback_data="pay_menu"),
-                    InlineKeyboardButton("🏠 Main Menu", callback_data="main_menu"),
-                ]
-            ]
+            payment_url, _ = get_or_create_payment_link(user_id, user_name)
+            if not payment_url:
+                payment_url = f"https://rzp.io/l/chatmate-300-access"
 
-        await query.edit_message_text(
-            text=text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=ParseMode.HTML,
-        )
+            pending_text = (
+                f"⏳ <b>Payment Not Detected Yet</b>\\n\\n"
+                f"Hi {user_name}, we have not yet received confirmation of your <b>₹{ACCESS_FEE_INR}</b> payment.\\n\\n"
+                "<b>How to complete:</b>\\n"
+                "1. Tap <b>'Pay ₹300 via Razorpay'</b> below.\\n"
+                "2. Pay using GPay, PhonePe, Paytm, UPI, or Card.\\n"
+                "3. Return here and tap <b>'I Have Paid — Unlock App Link'</b>.\\n\\n"
+                "<i>(If you just completed payment, please wait 5-10 seconds for the bank confirmation and tap verify again.)</i>"
+            )
+            await query.edit_message_text(
+                text=pending_text,
+                reply_markup=get_payment_required_keyboard(payment_url),
+                parse_mode=ParseMode.HTML,
+            )
 
     elif data == "about_chatmate":
         about_text = (
             "💖 <b>About ${config.appName}</b>\\n\\n"
-            "${config.appName} is designed to make your daily conversations smoother, faster, and smarter!\\n\\n"
-            "✨ <b>Highlights:</b>\\n"
-            "• End-to-end security & user privacy\\n"
-            "• Smart message translation & AI companion\\n"
-            "• High-definition voice & video quality\\n"
-            "• Low battery & lightweight data consumption\\n\\n"
-            "👇 <i>Ready to join? Download now:</i>"
+            "${config.appName} is a next-generation social communication app engineered for speed, "
+            "privacy, and rich conversations.\\n\\n"
+            "🌟 <b>Key Features:</b>\\n"
+            "• ⚡ <b>Lightning Fast:</b> Instant messaging with low latency\\n"
+            "• 🔒 <b>Privacy First:</b> End-to-end encrypted messaging\\n"
+            "• 🤖 <b>Smart Assistant:</b> AI-driven chat enhancements\\n"
+            "• 🎨 <b>Custom Themes:</b> Clean dark and light modes\\n\\n"
+            f"💰 <b>Access Fee:</b> One-time ₹{ACCESS_FEE_INR} payment.\\n\\n"
+            "Tap below to return to payment & unlock the app:"
         )
-        keyboard = [
-            [
-                InlineKeyboardButton("📲 Download App", url=APP_DOWNLOAD_URL),
-                InlineKeyboardButton("💳 Pay with Razorpay", callback_data="pay_menu"),
-            ],
-            [
-                InlineKeyboardButton("🔙 Back to Main Menu", callback_data="main_menu"),
-            ]
-        ]
+        payment_url, _ = get_or_create_payment_link(user_id, user_name)
+        if not payment_url:
+            payment_url = f"https://rzp.io/l/chatmate-300-access"
+
         await query.edit_message_text(
             text=about_text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            reply_markup=get_payment_required_keyboard(payment_url),
             parse_mode=ParseMode.HTML,
         )
 
     elif data == "help_menu":
         help_text = (
-            "ℹ️ <b>${config.appName} Help Center</b>\\n\\n"
-            "Welcome to the help section! Need guidance on how to use ${config.appName}?\\n\\n"
-            "• <b>Download App:</b> Tap '📲 Download App' or use /app to download the APK.\\n"
-            "• <b>Razorpay Payment:</b> Tap '💳 Pay with Razorpay' or use /pay to upgrade.\\n"
-            "• <b>Features:</b> Tap '💖 About ChatMate' or use /about to see feature details.\\n"
-            "• <b>Commands:</b> Use /start to refresh the menu anytime.\\n\\n"
-            "Tap below to choose an action:"
+            "ℹ️ <b>${config.appName} Help & Payment Support</b>\\n\\n"
+            f"• <b>Why pay ₹{ACCESS_FEE_INR}?</b> ${config.appName} provides private, ad-free high-speed servers with AI companion features.\\n"
+            "• <b>Payment Methods:</b> All UPI apps (Google Pay, PhonePe, Paytm), BHIM, Credit/Debit Cards, NetBanking.\\n"
+            "• <b>After Payment:</b> The app download link unlocks automatically instantly.\\n\\n"
+            "Need help or payment issue? Contact admin or proceed to pay below:"
         )
-        keyboard = [
-            [
-                InlineKeyboardButton("📲 Download App", url=APP_DOWNLOAD_URL),
-                InlineKeyboardButton("💳 Pay with Razorpay", callback_data="pay_menu"),
-            ],
-            [
-                InlineKeyboardButton("🔙 Back to Main Menu", callback_data="main_menu"),
-            ]
-        ]
+        payment_url, _ = get_or_create_payment_link(user_id, user_name)
+        if not payment_url:
+            payment_url = f"https://rzp.io/l/chatmate-300-access"
+
         await query.edit_message_text(
             text=help_text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            reply_markup=get_payment_required_keyboard(payment_url),
             parse_mode=ParseMode.HTML,
         )
 
-    elif data == "main_menu":
-        welcome_text = (
-            "👋 <b>${config.appName} Main Menu</b>\\n\\n"
-            "Welcome back! What would you like to explore today?\\n\\n"
-            "• /pay - Razorpay payment portal\\n"
-            "• /about - Learn more about ${config.appName}\\n"
-            "• /app - Get the direct app download link\\n"
-            "• /help - Display the help guide"
+
+async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handles /app command.
+    Checks if user has paid ₹300. If yes, gives link. If not, requires payment.
+    """
+    user = update.effective_user
+    if not user:
+        return
+
+    user_name = user.first_name or "Friend"
+    user_id = user.id
+
+    if user_id in paid_users:
+        await update.message.reply_text(
+            f"📲 <b>Download ${config.appName} APK:</b>\\n<a href=\\"{APP_DOWNLOAD_URL}\\">{APP_DOWNLOAD_URL}</a>",
+            reply_markup=get_unlocked_app_keyboard(),
+            parse_mode=ParseMode.HTML,
         )
-        await query.edit_message_text(
-            text=welcome_text,
-            reply_markup=get_main_keyboard(),
+    else:
+        payment_url, _ = get_or_create_payment_link(user_id, user_name)
+        if not payment_url:
+            payment_url = f"https://rzp.io/l/chatmate-300-access"
+
+        await update.message.reply_text(
+            f"🔒 <b>${config.appName} App Download is Locked</b>\\n\\n"
+            f"To get the download link, please complete the one-time activation payment of <b>₹{ACCESS_FEE_INR}</b> below:",
+            reply_markup=get_payment_required_keyboard(payment_url),
             parse_mode=ParseMode.HTML,
         )
 
 
 async def unknown_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Polite fallback for unhandled text."""
-    if update.message:
+    """Fallback handler."""
+    user = update.effective_user
+    if not user or not update.message:
+        return
+
+    user_name = user.first_name or "Friend"
+    user_id = user.id
+
+    if user_id in paid_users:
         await update.message.reply_text(
-            "🤖 I'm here to help you with ${config.appName}!\\n"
-            "Please use the buttons below or type /help or /pay to see all available options.",
-            reply_markup=get_main_keyboard(),
+            "✅ Your account is active! Tap below to download ${config.appName}:",
+            reply_markup=get_unlocked_app_keyboard(),
+        )
+    else:
+        payment_url, _ = get_or_create_payment_link(user_id, user_name)
+        if not payment_url:
+            payment_url = f"https://rzp.io/l/chatmate-300-access"
+
+        await update.message.reply_text(
+            f"🔒 Please complete your <b>₹{ACCESS_FEE_INR} payment</b> to unlock the ${config.appName} application link:",
+            reply_markup=get_payment_required_keyboard(payment_url),
+            parse_mode=ParseMode.HTML,
         )
 
 
@@ -469,21 +443,18 @@ def main() -> None:
     port_thread = threading.Thread(target=start_health_server, daemon=True)
     port_thread.start()
 
-    logger.info("Initializing ${config.appName} Telegram Bot with Razorpay integration...")
+    logger.info("Initializing ${config.appName} Paywall Bot (₹300 Access Fee)...")
 
     application = ApplicationBuilder().token(token).build()
 
     application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("pay", pay_command))
-    application.add_handler(CommandHandler("about", about_command))
     application.add_handler(CommandHandler("app", app_command))
-    application.add_handler(CommandHandler("help", help_command))
 
     application.add_handler(CallbackQueryHandler(button_callback_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_message_handler))
     application.add_error_handler(error_handler)
 
-    logger.info("${config.appName} Bot is starting polling... Press Ctrl+C to stop.")
+    logger.info("${config.appName} Paywall Bot is starting polling... Press Ctrl+C to stop.")
     application.run_polling(drop_pending_updates=True)
 
 
@@ -505,7 +476,7 @@ ${config.envVarName}="1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ"
 
 # Razorpay Live API Credentials
 RAZORPAY_KEY_ID="rzp_live_TlLpKTsB7MoXPp"
-RAZORPAY_KEY_SECRET="your_razorpay_key_secret_here"
+RAZORPAY_KEY_SECRET="70oNNW8Uj5ncuuEco3W1PHzn"
 `;
 }
 
@@ -525,26 +496,12 @@ venv/
 }
 
 export function generateReadme(config: BotConfig): string {
-  return `# 🤖 ${config.appName} Telegram Bot (Razorpay + Render 24/7)
+  return `# 🤖 ${config.appName} Telegram Bot (₹300 Paywall + Razorpay + Render 24/7)
 
-A complete, beginner-friendly Telegram Bot built with Python (\`python-telegram-bot\` v20+) and **Razorpay Live Payments**.
-
-## ✨ Features
-- 💳 **Razorpay Live Payment Option**: Dynamic payment link generation supporting UPI (GPay, PhonePe, Paytm), Credit/Debit Cards, NetBanking.
-- 💖 **About ChatMate Button**: Features and app highlights.
-- 📲 **Download App Button**: Direct link to the app (\`${config.appDownloadUrl}\`).
-- ℹ️ **Help Button**: Dedicated interactive guide and command manual.
-- ⚡ **Commands**: \`/start\`, \`/pay\`, \`/about\`, \`/app\`, \`/help\`.
-- 🌐 **Render Port-Scan Immune**: Embedded HTTP server ensures 24/7 uptime on Render Web Services.
-
----
-
-## 🔑 Render Environment Variables Setup
-
-In your Render Dashboard (**Settings &rarr; Environment Variables**), add:
-- \`TELEGRAM_BOT_TOKEN\` = \`your_botfather_token\`
-- \`RAZORPAY_KEY_ID\` = \`rzp_live_TlLpKTsB7MoXPp\`
-- \`RAZORPAY_KEY_SECRET\` = \`your_razorpay_key_secret\`
+A complete paywall bot:
+1. User presses /start.
+2. Bot demands ₹300 payment via Razorpay.
+3. Once ₹300 is paid and verified, the official ChatMate App download link is UNLOCKED!
 `;
 }
 
